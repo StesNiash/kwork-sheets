@@ -1,0 +1,86 @@
+from __future__ import annotations
+
+import html
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from mock.sheet_report import build_report, load_orders
+
+DEMO = ROOT / "demo"
+
+
+def main() -> None:
+    report = build_report(load_orders(ROOT / "mock" / "sample_orders.csv"))
+    DEMO.mkdir(exist_ok=True)
+    (DEMO / "report.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (DEMO / "index.html").write_text(render(report), encoding="utf-8")
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+
+
+def render(report: dict) -> str:
+    rows = "".join(
+        f"<tr><td>{html.escape(status)}</td><td>{value['count']}</td><td>{value['total']:.2f} ₽</td></tr>"
+        for status, value in report["by_status"].items()
+    )
+    return f"""<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kwork-sheets — демо</title>
+<style>
+:root {{ color-scheme:dark; --bg:#0a0d0b; --panel:#121713; --line:#29342b; --text:#f2f1e8; --muted:#a5ada6; --gold:#e7c15c; --green:#84d6a8; --blue:#9ac3ff; }}
+* {{ box-sizing:border-box; }}
+body {{ margin:0; background:radial-gradient(circle at 76% 0%,rgba(132,214,168,.12),transparent 32rem),var(--bg); color:var(--text); font:15px/1.55 Inter,"Segoe UI",system-ui,sans-serif; }}
+main {{ width:min(calc(100% - 40px),980px); margin:auto; padding:56px 0; }}
+.eyebrow {{ margin:0 0 10px; color:var(--gold); font-size:12px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }}
+h1 {{ margin:0 0 12px; font-size:clamp(36px,6vw,64px); line-height:.98; letter-spacing:-.05em; }}
+.lead {{ max-width:720px; color:var(--muted); font-size:18px; }}
+.stats {{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:28px 0; }}
+.stat {{ padding:16px; border:1px solid var(--line); border-radius:14px; background:var(--panel); }}
+.stat span {{ display:block; color:var(--muted); font-size:12px; }}
+.stat strong {{ font-size:27px; }}
+.panel {{ margin:12px 0; padding:20px; border:1px solid var(--line); border-radius:16px; background:var(--panel); }}
+.panel h2 {{ margin:0 0 10px; font-size:18px; }}
+.panel p {{ margin:0 0 12px; color:var(--muted); }}
+pre, code {{ font-family:"Cascadia Code",Consolas,monospace; }}
+pre {{ margin:0; padding:12px; overflow:auto; border:1px solid var(--line); border-radius:10px; background:#0c100d; color:var(--green); font-size:12px; }}
+table {{ width:100%; border-collapse:collapse; font-size:13px; }}
+th,td {{ padding:9px 8px; border-bottom:1px solid var(--line); text-align:left; }}
+th {{ color:var(--muted); font-weight:600; }}
+td:first-child {{ color:var(--blue); }}
+.footer {{ margin-top:26px; color:#777f78; font-size:12px; }}
+@media (max-width:720px) {{ .stats {{ grid-template-columns:1fr; }} }}
+</style>
+</head>
+<body><main>
+<p class="eyebrow">kwork-sheets · demo report</p>
+<h1>Отчёт, который собирает себя сам</h1>
+<p class="lead">Локальная проверка логики: те же правила, что в Apps Script, но на тестовом CSV. В Google Sheets остаётся подключить листы и триггер.</p>
+<div class="stats">
+  <div class="stat"><span>заказов</span><strong>{report['orders']}</strong></div>
+  <div class="stat"><span>сумма</span><strong>{report['total']:.0f} ₽</strong></div>
+  <div class="stat"><span>последняя дата</span><strong>{html.escape(report['latest_date'])}</strong></div>
+</div>
+<section class="panel"><h2>Что делает Apps Script</h2><pre>function buildDailyReport() {{
+  const book = SpreadsheetApp.getActive();
+  const orders = book.getSheetByName('Orders');
+  const report = book.getSheetByName('Report');
+  ...
+}}</pre><p>Читает Orders, считает сумму и статусы, перезаписывает Report и отправляет письмо, если задан NOTIFY_EMAIL.</p></section>
+<section class="panel"><h2>Разрез по статусам</h2><table><thead><tr><th>Статус</th><th>Заказов</th><th>Сумма</th></tr></thead><tbody>{rows}</tbody></table></section>
+<section class="panel"><h2>Запуск</h2><p>Расширения → Apps Script → вставить <code>Code.gs</code> и <code>appsscript.json</code> → выполнить <code>setup</code>, затем <code>buildDailyReport</code>.</p></section>
+<p class="footer">Демо на тестовых данных. В репозитории нет клиентских таблиц и секретов.</p>
+</main></body></html>
+"""
+
+
+if __name__ == "__main__":
+    main()
